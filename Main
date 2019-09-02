@@ -1,0 +1,100 @@
+#include "TM1637.h" 
+#include "Ultrasonic.h"
+#include <math.h>
+
+/* Macro Define */
+#define CLK               3               /* 4-Digit Display clock pin */
+#define DIO               4              /* 4-Digit Display data pin */
+#define ULTRASONIC_PIN    24              /* pin of the Ultrasonic Ranger */
+#define ULTRASONIC_PIN2   39
+
+/* Global Variables */
+TM1637 tm1637(CLK, DIO);                  /* 4-Digit Display object */
+Ultrasonic ultrasonic(ULTRASONIC_PIN);    /* Ultrasonic Ranger object */
+Ultrasonic ultrasonic2(ULTRASONIC_PIN2);
+int distance1 = 0;                         /* variable to store the distance to obstacles in front */
+int distance2 = 0;
+int8_t bits[4] = {0};                     /* array to store the single bits of the value */
+int prevdistance1 = 0;        
+int prevdistance2 = 0;
+
+int floorSqrt(int x) 
+{ 
+    // Base cases 
+    if (x == 0 || x == 1){
+      return x;
+    } 
+  
+    // Staring from 1, try all numbers until 
+    // i*i is greater than or equal to x. 
+    int i = 1, result = 1; 
+    while (result <= x) 
+    { 
+      i++; 
+      result = i * i; 
+    } 
+    return i - 1; 
+} 
+
+void Display(int var){
+  for(int i = 3; i >= 0; i--) 
+      {
+         /* Convert the value to individual decimal digits for display */
+          bits[i] = var % 10;
+          var = var / 10;  
+          tm1637.display(i, bits[i]);               /* display on 4-Digit Display */
+      }
+}
+
+
+/* the setup() method runs once, when the sketch starts */
+void setup() 
+{
+    /* Initialize 4-Digit Display */
+    tm1637.init();
+    tm1637.set(BRIGHT_TYPICAL);
+}
+
+
+void loop(){
+  
+    distance1 = ultrasonic.MeasureInCentimeters();
+    distance2 = ultrasonic2.MeasureInCentimeters();
+    //The sensor detects noise after around 190cm commonly, so this is to prevent noise
+    if((distance1 < 190 && prevdistance1 > 190  )||(distance2 < 190 && prevdistance2 > 190)){  
+      float r1 = min(distance1,distance2);
+      float timer = 0.0;
+      while(distance1 < 190 || distance2 < 190){
+        timer += 1.0;
+        distance1 = ultrasonic.MeasureInCentimeters();
+        distance2 = ultrasonic2.MeasureInCentimeters();
+        delay(1);
+      }
+      float r2 = min(prevdistance1,prevdistance2);
+      //The timer is in miliseconds, so it must be divided by 1 thousand
+      timer /= 1000.0;
+      //This is to accound for the operations done inside of the loop that caues each iteration to last more than 1 milisecond
+      timer *= (float)2;
+      //Display(timer);
+      //delay(1000);
+      float distancetravel = (r1*r1) + r2*r2;
+      
+      float temp1 = 2*r1*r2;
+      //Dividing by a factor of two is a result of multiplying by cos(60)
+      float temp2 = temp1/2;
+      int temp3 = distancetravel - temp1;
+      float fin = floorSqrt(temp3);
+      //Display(fin);
+      //delay(2000);
+      float speed = fin/timer;
+      speed/= 100;
+      //Objects moving too quickly sometimes are just noise, so they are filtered out
+      if(speed < 300){
+        Display(speed);
+        delay(2000);
+      }
+    }
+    Display(0000);
+    prevdistance1 = distance1;
+    prevdistance2 = distance2;
+}
